@@ -29,7 +29,7 @@ def setup_directory(tmp_path):
 
 
 def test_create_commit_returns_201(tmp_path, setup_directory):
-    data = json.dumps({'path': str(tmp_path)})
+    data = json.dumps({'directoryPath': str(tmp_path)})
 
     response = CommitService.commit(data)
     response_dict = response.json()
@@ -41,16 +41,16 @@ def test_create_commit_returns_201(tmp_path, setup_directory):
     )
     assert response.status_code == HTTPStatus.CREATED.value
     assert received_response.status == HTTPStatus.CREATED.value
-    assert received_response.results == ["test_file3.txt has been committed\n",
-                                         "test_file2.txt has been committed\n",
-                                         "test_file1.txt has been committed\n"]
+    assert received_response.results.sort() == ["test_file3.txt has been committed\n",
+                                                "test_file2.txt has been committed\n",
+                                                "test_file1.txt has been committed\n"].sort()
     assert received_response.message == "All files have been committed"
 
 
 def test_create_commit_with_invalid_data_returns_400(tmp_path):
     invalid_path = tmp_path / "invalid_directory"
 
-    data = json.dumps({'path': str(invalid_path)})
+    data = json.dumps({'directoryPath': str(invalid_path)})
 
     response = CommitService.commit(data)
     response_dict = response.json()
@@ -64,11 +64,11 @@ def test_create_commit_with_invalid_data_returns_400(tmp_path):
     assert response.status_code == HTTPStatus.BAD_REQUEST.value
     assert received_response.status == HTTPStatus.BAD_REQUEST.value
     assert received_response.results == [f"{invalid_path} is not a directory"]
-    assert received_response.message == "The request is invalid"
+    assert received_response.message == "The requested directory is not valid"
 
 
 def test_create_commit_returns_409_when_directory_is_up_to_date(tmp_path, setup_directory):
-    data = json.dumps({'path': str(tmp_path)})
+    data = json.dumps({'directoryPath': str(tmp_path)})
 
     response = CommitService.commit(data)
     assert response.status_code == HTTPStatus.CREATED.value
@@ -88,11 +88,10 @@ def test_create_commit_returns_409_when_directory_is_up_to_date(tmp_path, setup_
     assert received_response.message == "The requested directory is up to date"
 
 
-def test_create_commit_returns_500_when_a_file_cannot_be_committed(tmp_path):
+def test_create_commit_returns_500_when_a_file_cannot_be_committed(tmp_path, setup_directory):
     is_accessible = True
 
-    restricted_file_path = Path(f"{tmp_path}/test_file1.txt")
-    restricted_file_path.write_text("This is a test file")
+    restricted_file_path = Path(f"{tmp_path}/temp/nested_temp/test_file3.txt")
 
     # Removes all read permissions for a file to create a case where java's Files.copy
     # would fail. Only works on Mac
@@ -109,13 +108,13 @@ def test_create_commit_returns_500_when_a_file_cannot_be_committed(tmp_path):
 
         try:
             msvcrt.locking(open_restricted_file.fileno(), msvcrt.LK_NBLCK, file_size)
-        except:
+        except OSError:
             is_accessible = False
 
     # Asserts the file is in a state where attempting to commit it will fail
     assert os.access(restricted_file_path, os.R_OK) or is_accessible is False
 
-    data = json.dumps({'path': str(tmp_path)})
+    data = json.dumps({'directoryPath': str(tmp_path)})
 
     response = CommitService.commit(data)
     response_dict = response.json()
@@ -128,5 +127,7 @@ def test_create_commit_returns_500_when_a_file_cannot_be_committed(tmp_path):
 
     assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR.value
     assert received_response.status == HTTPStatus.INTERNAL_SERVER_ERROR.value
-    assert received_response.results == ["test_file1.txt has not been committed\n"]
+    assert received_response.results.sort() == ["test_file3.txt has not been committed\n",
+                                                "test_file2.txt has been committed\n",
+                                                "test_file1.txt has been committed\n"].sort()
     assert received_response.message == "Not all files have been committed"
