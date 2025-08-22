@@ -12,7 +12,13 @@ from src.services.commit_service import CommitService
 
 
 @pytest.fixture(scope='function')
-def setup_directory(tmp_path):
+def commit_service():
+    return CommitService
+
+
+@pytest.fixture(scope='function')
+def directory_data(tmp_path):
+    # -------------------- Creates three files and two directories within "tmp_path" directory --------------------
     (tmp_path / "test_file1.txt").write_text("This is a test file")
 
     nested_directory = tmp_path / "temp"
@@ -28,10 +34,11 @@ def setup_directory(tmp_path):
     (second_nested_directory / "test_file3.txt").write_text("This is a third test file")
 
 
-def test_create_commit_returns_201(tmp_path, setup_directory):
+def test_post_commit_returns_201_when_vc_directory_does_not_exist(tmp_path, directory_data, commit_service):
+    # Packages the directory being committed into a dictionary and converts the dictionary to a JSON formatted string
     data = json.dumps({'directoryPath': str(tmp_path)})
 
-    response = CommitService.commit(data)
+    response = commit_service.commit(data)
     response_dict = response.json()
 
     received_response = Response(
@@ -41,18 +48,20 @@ def test_create_commit_returns_201(tmp_path, setup_directory):
     )
     assert response.status_code == HTTPStatus.CREATED.value
     assert received_response.status == HTTPStatus.CREATED.value
-    assert received_response.results.sort() == ["test_file3.txt has been committed\n",
-                                                "test_file2.txt has been committed\n",
-                                                "test_file1.txt has been committed\n"].sort()
+    assert sorted(received_response.results) == sorted(["test_file3.txt has been committed\n",
+                                                        "test_file2.txt has been committed\n",
+                                                        "test_file1.txt has been committed\n"])
     assert received_response.message == "All files have been committed"
 
 
-def test_create_commit_with_invalid_data_returns_400(tmp_path):
+def test_post_commit_with_invalid_data_returns_400(tmp_path, commit_service):
+    # Creates a path to a directory that does not exist
     invalid_path = tmp_path / "invalid_directory"
 
+    # Packages the directory being committed into a dictionary and converts the dictionary to a JSON formatted string
     data = json.dumps({'directoryPath': str(invalid_path)})
 
-    response = CommitService.commit(data)
+    response = commit_service.commit(data)
     response_dict = response.json()
 
     received_response = Response(
@@ -67,13 +76,15 @@ def test_create_commit_with_invalid_data_returns_400(tmp_path):
     assert received_response.message == "The requested directory is not valid"
 
 
-def test_create_commit_returns_409_when_directory_is_up_to_date(tmp_path, setup_directory):
+def test_post_commit_returns_409_when_directory_is_up_to_date(tmp_path, directory_data, commit_service):
+    # Packages the directory being committed into a dictionary and converts the dictionary to a JSON formatted string
     data = json.dumps({'directoryPath': str(tmp_path)})
 
-    response = CommitService.commit(data)
+    # Commits to create version control history
+    response = commit_service.commit(data)
     assert response.status_code == HTTPStatus.CREATED.value
 
-    response = CommitService.commit(data)
+    response = commit_service.commit(data)
     response_dict = response.json()
 
     received_response = Response(
@@ -88,7 +99,7 @@ def test_create_commit_returns_409_when_directory_is_up_to_date(tmp_path, setup_
     assert received_response.message == "The requested directory is up to date"
 
 
-def test_create_commit_returns_500_when_a_file_cannot_be_committed(tmp_path, setup_directory):
+def test_post_commit_returns_500_when_a_file_cannot_be_committed(tmp_path, directory_data, commit_service):
     is_accessible = True
 
     restricted_file_path = Path(f"{tmp_path}/temp/nested_temp/test_file3.txt")
@@ -114,9 +125,10 @@ def test_create_commit_returns_500_when_a_file_cannot_be_committed(tmp_path, set
     # Asserts the file is in a state where attempting to commit it will fail
     assert os.access(restricted_file_path, os.R_OK) or is_accessible is False
 
+    # Packages the directory being committed into a dictionary and converts the dictionary to a JSON formatted string
     data = json.dumps({'directoryPath': str(tmp_path)})
 
-    response = CommitService.commit(data)
+    response = commit_service.commit(data)
     response_dict = response.json()
 
     received_response = Response(
@@ -127,7 +139,7 @@ def test_create_commit_returns_500_when_a_file_cannot_be_committed(tmp_path, set
 
     assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR.value
     assert received_response.status == HTTPStatus.INTERNAL_SERVER_ERROR.value
-    assert received_response.results.sort() == ["test_file3.txt has not been committed\n",
-                                                "test_file2.txt has been committed\n",
-                                                "test_file1.txt has been committed\n"].sort()
+    assert sorted(received_response.results) == sorted(["test_file3.txt has not been committed\n",
+                                                        "test_file2.txt has been committed\n",
+                                                        "test_file1.txt has been committed\n"])
     assert received_response.message == "Not all files have been committed"
