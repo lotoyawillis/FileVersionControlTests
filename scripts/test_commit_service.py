@@ -54,6 +54,127 @@ def test_post_commit_returns_201_when_vc_directory_does_not_exist(tmp_path, dire
     assert received_response.message == "All files have been committed"
 
 
+def test_post_commit_returns_201_when_the_file_content_has_changed_since_the_last_commit(tmp_path, directory_data,
+                                                                                         commit_service):
+    # Packages the directory being committed into a dictionary and converts the dictionary to a JSON formatted string
+    data = json.dumps({'directoryPath': str(tmp_path)})
+
+    # Commits to create version control history
+    first_commit_response = commit_service.commit(data)
+    assert first_commit_response.status_code == HTTPStatus.CREATED.value
+
+    # Ensures the version control directory was created
+    version_control_directory_path = Path(f"{tmp_path}/.vc/1")
+    assert version_control_directory_path.exists() and version_control_directory_path.is_dir()
+
+    # Modifies the "test_file3.txt" file created in directory_data fixture
+    test_file3_path = Path(f"{tmp_path}/temp/nested_temp/test_file3.txt")
+    test_file3_path.write_text("This is a changed file")
+
+    # Ensures "test_file3.txt" was modified
+    with open(test_file3_path, mode='r') as test_file3:
+        file_contents = test_file3.readlines()
+    assert file_contents == ["This is a changed file"]
+
+    second_commit_response = commit_service.commit(data)
+    response_dict = second_commit_response.json()
+
+    received_response = Response(
+        status=response_dict["status"],
+        results=response_dict["results"],
+        message=response_dict["message"]
+    )
+    assert second_commit_response.status_code == HTTPStatus.CREATED.value
+    assert received_response.status == HTTPStatus.CREATED.value
+    assert sorted(received_response.results) == sorted(["test_file3.txt has been committed\n",
+                                                        "test_file2.txt has been committed\n",
+                                                        "test_file1.txt has been committed\n"])
+    assert received_response.message == "All files have been committed"
+
+
+def test_post_commit_returns_201_when_the_file_name_has_changed_since_the_last_commit(tmp_path, directory_data,
+                                                                                      commit_service):
+    # Packages the directory being committed into a dictionary and converts the dictionary to a JSON formatted string
+    data = json.dumps({'directoryPath': str(tmp_path)})
+
+    # Commits to create version control history
+    first_commit_response = commit_service.commit(data)
+    assert first_commit_response.status_code == HTTPStatus.CREATED.value
+
+    # Ensures the version control directory was created
+    version_control_directory_path = Path(f"{tmp_path}/.vc/1")
+    assert version_control_directory_path.exists() and version_control_directory_path.is_dir()
+
+    # Creates paths for the "test_file3.txt" file created in directory_data and the path it would have when renamed
+    test_file3_path = Path(f"{tmp_path}/temp/nested_temp/test_file3.txt")
+    renamed_test_file_path = Path(f"{tmp_path}/temp/nested_temp/renamed_test_file.txt")
+
+    # Ensures the "test_file3.txt" file was renamed to "renamed_test_file.txt"
+    os.rename(test_file3_path, renamed_test_file_path)
+    assert test_file3_path.exists() is False and renamed_test_file_path.exists() is True
+
+    second_commit_response = commit_service.commit(data)
+    response_dict = second_commit_response.json()
+
+    received_response = Response(
+        status=response_dict["status"],
+        results=response_dict["results"],
+        message=response_dict["message"]
+    )
+    assert second_commit_response.status_code == HTTPStatus.CREATED.value
+    assert received_response.status == HTTPStatus.CREATED.value
+    assert sorted(received_response.results) == sorted(["renamed_test_file.txt has been committed\n",
+                                                        "test_file2.txt has been committed\n",
+                                                        "test_file1.txt has been committed\n"])
+    assert received_response.message == "All files have been committed"
+
+
+def test_post_commit_returns_201_when_the_file_name_and_file_content_has_changed_since_the_last_commit(tmp_path,
+                                                                                                       directory_data,
+                                                                                                       commit_service):
+    # Packages the directory being committed into a dictionary and converts the dictionary to a JSON formatted string
+    data = json.dumps({'directoryPath': str(tmp_path)})
+
+    # Commits to create version control history
+    first_commit_response = commit_service.commit(data)
+    assert first_commit_response.status_code == HTTPStatus.CREATED.value
+
+    # Ensures the version control directory was created
+    version_control_directory_path = Path(f"{tmp_path}/.vc/1")
+    assert version_control_directory_path.exists() and version_control_directory_path.is_dir()
+
+    # Creates paths for the "test_file3.txt" file created in directory_data and the path it would have when renamed
+    test_file3_path = Path(f"{tmp_path}/temp/nested_temp/test_file3.txt")
+    renamed_test_file_path = Path(f"{tmp_path}/temp/nested_temp/renamed_test_file.txt")
+
+    # Ensures the "test_file3.txt" file was renamed to "renamed_test_file.txt"
+    os.rename(test_file3_path, renamed_test_file_path)
+    assert test_file3_path.exists() is False and renamed_test_file_path.exists() is True
+
+    # Modifies the "renamed_test_file.txt" file created in directory_data fixture
+    renamed_test_file_path.write_text("This is a changed file")
+
+    # Ensures "renamed_test_file.txt" was modified
+    with open(renamed_test_file_path, mode='r') as renamed_file:
+        file_contents = renamed_file.readlines()
+    assert file_contents == ["This is a changed file"]
+
+    second_commit_response = commit_service.commit(data)
+    response_dict = second_commit_response.json()
+
+    received_response = Response(
+        status=response_dict["status"],
+        results=response_dict["results"],
+        message=response_dict["message"]
+    )
+    assert second_commit_response.status_code == HTTPStatus.CREATED.value
+    assert received_response.status == HTTPStatus.CREATED.value
+    assert sorted(received_response.results) == sorted(["renamed_test_file.txt has been committed\n",
+                                                        "test_file2.txt has been committed\n",
+                                                        "test_file1.txt has been committed\n"])
+    assert received_response.message == "All files have been committed"
+
+
 def test_post_commit_with_invalid_data_returns_400(tmp_path, commit_service):
     # Creates a path to a directory that does not exist
     invalid_path = tmp_path / "invalid_directory"
